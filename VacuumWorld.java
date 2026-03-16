@@ -3,21 +3,21 @@ import java.util.*;
 class State {
     String location;
     int roomA, roomB;
-    int actionCount;
-    int h;
-    int f;
+    int g; // number of actions taken
+    int h; // number of dirty rooms
+    int f; // g + h; total effort
     String actionTaken;
-    State parent;
+    State previousState;
 
-    State(String location, int roomA, int roomB, int actionCount, String actionTaken, State parent) {
-        this.location    = location;
-        this.roomA       = roomA;
-        this.roomB       = roomB;
-        this.actionCount           = actionCount;
-        this.h           = roomA + roomB;
-        this.f           = actionCount + h;
-        this.actionTaken = actionTaken;
-        this.parent      = parent;
+    State(String location, int roomA, int roomB, int g, String actionTaken, State previousState) {
+        this.location      = location;
+        this.roomA         = roomA;
+        this.roomB         = roomB;
+        this.g             = g;
+        this.h             = roomA + roomB;
+        this.f             = g + h;
+        this.actionTaken   = actionTaken;
+        this.previousState = previousState;
     }
 
     String getKey() { return location + roomA + roomB; }
@@ -27,7 +27,7 @@ class State {
         return "[" + actionTaken + " | Loc:" + location
              + " A:" + (roomA == 1 ? "Dirty" : "Clean")
              + " B:" + (roomB == 1 ? "Dirty" : "Clean")
-             + " | g:" + actionCount + " h:" + h + " f:" + f + "]";
+             + " | g:" + g + " h:" + h + " f:" + f + "]";
     }
 }
 
@@ -35,52 +35,50 @@ public class VacuumWorld {
 
     static List<State> getNextMoves(State s) {
         List<State> nextMoves = new ArrayList<>();
-        int nextActionCount = s.actionCount + 1;
+        int nextG = s.g + 1;
 
         if (s.location.equals("A")) {
             if (s.roomA == 1)
-                nextMoves.add(new State("A", 0, s.roomB, nextActionCount, "SUCK", s));
-            nextMoves.add(new State("B", s.roomA, s.roomB, nextActionCount, "MOVE_RIGHT", s));
+                nextMoves.add(new State("A", 0, s.roomB, nextG, "SUCK", s));
+            nextMoves.add(new State("B", s.roomA, s.roomB, nextG, "MOVE_RIGHT", s));
         } else {
             if (s.roomB == 1)
-                nextMoves.add(new State("B", s.roomA, 0, nextActionCount, "SUCK", s));
-            nextMoves.add(new State("A", s.roomA, s.roomB, nextActionCount, "MOVE_LEFT", s));
+                nextMoves.add(new State("B", s.roomA, 0, nextG, "SUCK", s));
+            nextMoves.add(new State("A", s.roomA, s.roomB, nextG, "MOVE_LEFT", s));
         }
         return nextMoves;
     }
 
     static void showSolution(State goal) {
         List<State> path = new ArrayList<>();
-        for (State cameFrom = goal; cameFrom != null; cameFrom = cameFrom.parent)
+        for (State cameFrom = goal; cameFrom != null; cameFrom = cameFrom.previousState)
             path.add(cameFrom);
         Collections.reverse(path);
 
         System.out.println("\n+==============================+");
-        System.out.println("|       SOLUTION PATH          |");
+        System.out.println("|         SOLUTION PATH        |");
         System.out.println("+==============================+");
         for (int i = 0; i < path.size(); i++)
             System.out.println("  Step " + i + ": " + path.get(i));
         System.out.println("  Total actions: " + (path.size() - 1));
     }
 
-    // Prints all states currently waiting in the queue
     static void showQueue(Collection<State> toVisit) {
         if (toVisit.isEmpty()) {
             System.out.println("  Queue is now empty.");
             return;
         }
-        List<State> snapshot = new ArrayList<>(toVisit);
-        System.out.println("  Queue (" + snapshot.size() + " waiting):");
-        for (int i = 0; i < snapshot.size(); i++)
-            System.out.println("    [" + (i + 1) + "] " + snapshot.get(i));
+        List<State> queueCopy = new ArrayList<>(toVisit);
+        System.out.println("  Queue (" + queueCopy.size() + " waiting):");
+        for (int i = 0; i < queueCopy.size(); i++)
+            System.out.println("    [" + (i + 1) + "] " + queueCopy.get(i));
     }
 
     static void bfs(String loc, int a, int b) {
-        System.out.println("\n+-----------------------------------------+");
+        System.out.println("\n+----------------------------------------+");
         System.out.println("|  STRATEGY: Breadth-First Search (BFS)  |");
-        System.out.println("|  Type: UNINFORMED                       |");
-        System.out.println("|  Explores level by level                |");
-        System.out.println("+-----------------------------------------+");
+        System.out.println("|  Type: UNINFORMED                      |");
+        System.out.println("+----------------------------------------+");
 
         Queue<State> toVisit    = new LinkedList<>();
         Set<String> alreadySeen = new HashSet<>();
@@ -107,7 +105,7 @@ public class VacuumWorld {
             System.out.println("  >> Goal check: " + (thisState.h == 0 ? "GOAL!" : "Not yet (dirty rooms = " + thisState.h + ")"));
 
             if (thisState.h == 0) {
-                System.out.println("\n>> BFS SUCCESS: All rooms clean! ("
+                System.out.println("\n>> BFS SUCCESS: All rooms are clean! ("
                                  + steps + " steps)");
                 showSolution(thisState);
                 return;
@@ -121,7 +119,7 @@ public class VacuumWorld {
                     System.out.println("       + " + next);
                 }
             }
-            System.out.println("  ----------------------------------------");
+            System.out.println("  --------------------------------------------------------------------------------");
         }
         System.out.println("\n>> BFS FAILURE: No solution found.");
     }
@@ -130,8 +128,6 @@ public class VacuumWorld {
         System.out.println("\n+--------------------------------------------------+");
         System.out.println("|  STRATEGY: A* Search                             |");
         System.out.println("|  Type: INFORMED                                  |");
-        System.out.println("|  Uses f(n) = g(n) + h(n) to guide the search     |");
-        System.out.println("|  h(n) = number of dirty rooms remaining          |");
         System.out.println("+--------------------------------------------------+");
 
         PriorityQueue<State> toVisit = new PriorityQueue<>(Comparator.comparingInt(s -> s.f));
@@ -156,13 +152,13 @@ public class VacuumWorld {
 
             steps++;
             System.out.println("\n  >> Picked from queue: " + thisState);
-            System.out.println("     actionCount=" + thisState.actionCount
+            System.out.println("     g=" + thisState.g
                              + " | h=" + thisState.h
                              + " | f=" + thisState.f);
             System.out.println("  >> Goal check: " + (thisState.h == 0 ? "GOAL!" : "Not yet (dirty rooms = " + thisState.h + ")"));
 
             if (thisState.h == 0) {
-                System.out.println("\n>> A* SUCCESS: All rooms clean! ("
+                System.out.println("\n>> A* SUCCESS: All rooms are clean! ("
                                  + steps + " steps)");
                 showSolution(thisState);
                 return;
@@ -176,14 +172,14 @@ public class VacuumWorld {
                     System.out.println("       + " + next);
                 }
             }
-            System.out.println("  ----------------------------------------");
+            System.out.println("  --------------------------------------------------------------------------------");
         }
         System.out.println("\n>> A* FAILURE: No solution found.");
     }
 
     public static void main(String[] args) {
         System.out.println("+======================================+");
-        System.out.println("|     VACUUM WORLD SEARCH SOLVER       |");
+        System.out.println("|          VACUUM WORLD SEARCH         |");
         System.out.println("+======================================+");
 
         try (Scanner sc = new Scanner(System.in)) {
@@ -209,9 +205,9 @@ public class VacuumWorld {
             }
 
             System.out.println("\n--- Initial State ---");
-            System.out.println("  Vacuum Location : Room " + loc);
-            System.out.println("  Room A          : " + (a == 1 ? "Dirty" : "Clean"));
-            System.out.println("  Room B          : " + (b == 1 ? "Dirty" : "Clean"));
+            System.out.println("Vacuum Location : Room " + loc);
+            System.out.println("Room A          : " + (a == 1 ? "Dirty" : "Clean"));
+            System.out.println("Room B          : " + (b == 1 ? "Dirty" : "Clean"));
 
             int choice = 0;
             while (choice < 1 || choice > 3) {
